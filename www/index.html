@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bluetooth Шашки</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #2c3e50;
+            color: white;
+            margin: 0;
+            padding: 10px;
+        }
+        #bluetooth-menu {
+            background: #34495e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        button {
+            background: #2ecc71;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:active { background: #27ae60; }
+        .device-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+        .device-item {
+            background: #16a085;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            width: 90vw;
+            height: 90vw;
+            max-width: 400px;
+            max-height: 400px;
+            margin: 20px auto;
+            border: 4px solid #34495e;
+            background-color: #34495e;
+        }
+        .cell {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .black-cell { background-color: #7f8c8d; }
+        .white-cell { background-color: #ecf0f1; }
+        .checker {
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.4);
+            cursor: pointer;
+        }
+        .red { background-color: #e74c3c; border: 2px solid #fff; }
+        .blue { background-color: #3498db; border: 2px solid #fff; }
+        .selected { border: 3px solid #f1c40f !important; }
+        .status { font-size: 1.2rem; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+    <h2>Bluetooth Шашки</h2>
+    
+    <div id="bluetooth-menu">
+        <h3 id="bt-status">Статус: Bluetooth не подключен</h3>
+        <button id="btn-scan">Найти соперника</button>
+        <button id="btn-listen">Ждать подключения</button>
+        <ul id="device-list" class="device-list"></ul>
+    </div>
+
+    <div id="status" class="status">Подключитесь по Bluetooth для начала игры</div>
+    <div id="board"></div>
+
+    <script src="cordova.js"></script>
+    <script>
+        let myColor = ''; 
+        let isMyTurn = false;
+        let selectedChecker = null;
+        let boardState = Array(8).fill(null).map(() => Array(8).fill(null));
+
+        document.addEventListener('deviceready', onDeviceReady, false);
+
+        function onDeviceReady() {
+            document.getElementById('bt-status').innerText = "Bluetooth готов к работе";
+            document.getElementById('btn-scan').addEventListener('click', scanDevices);
+            document.getElementById('btn-listen').addEventListener('click', startListening);
+            
+            // Начинаем слушать входящие сообщения по Bluetooth
+            setInterval(readBluetoothData, 200); 
+            createBoard();
+        }
+
+        // --- ЛОГИКА BLUETOOTH ---
+
+        function scanDevices() {
+            document.getElementById('bt-status').innerText = "Поиск устройств...";
+            const listElement = document.getElementById('device-list');
+            listElement.innerHTML = "";
+
+            // Показываем список уже сопряженных Bluetooth-устройств
+bluetoothSerial.list(function(devices) {
+                devices.forEach(function(device) {
+                    const li = document.createElement('li');
+                    li.className = 'device-item';
+                    li.innerText = device.name || device.id;
+                    li.addEventListener('click', () => connectToDevice(device.address));
+                    listElement.appendChild(li);
+                });
+                if(devices.length === 0) {
+                    alert("Сопряженные устройства не найдены. Сначала сопрягите телефоны в настройках Android!");
+                }
+            }, () => alert("Ошибка при поиске"));
+        }
+
+        function connectToDevice(address) {
+            document.getElementById('bt-status').innerText = "Подключение...";
+            bluetoothSerial.connect(address, function() {
+                document.getElementById('bt-status').innerText = "Подключено к сопернику!";
+                myColor = 'red'; // Тот, кто подключился первым — играет красными
+                isMyTurn = true;
+                document.getElementById('status').innerText = "Ваш ход (Красные)";
+                sendBluetoothData("START:blue"); // Отправляем сопернику сигнал, что он синий
+            }, () => alert("Не удалось подключиться"));
+        }
+
+        function startListening() {
+            document.getElementById('bt-status').innerText = "Ожидание подключения...";
+            bluetoothSerial.listen(function() {
+                document.getElementById('bt-status').innerText = "Игрок подключился!";
+            }, () => alert("Ошибка ожидания"));
+        }
+
+        function sendBluetoothData(message) {
+            bluetoothSerial.write(message + "\n", null, () => alert("Ошибка отправки данных"));
+        }
+
+        function readBluetoothData() {
+            bluetoothSerial.available(function(numBytes) {
+                if (numBytes > 0) {
+                    bluetoothSerial.read(function(data) {
+                        handleIncomingData(data.trim());
+                    });
+                }
+            });
+        }
+
+        function handleIncomingData(data) {
+            console.log("Получено: " + data);
+            if (data.startsWith("START:")) {
+                myColor = data.split(":")[1];
+                isMyTurn = (myColor === 'red');
+                document.getElementById('status').innerText = isMyTurn ? "Ваш ход" : "Ход соперника";
+            } else if (data.startsWith("MOVE:")) {
+                // Обработка хода соперника: MOVE:fromRow,fromCol-toRow,toCol
+                const coords = data.split(":")[1].split("-");
+                const [fromRow, fromCol] = coords[0].split(",").map(Number);
+                const [toRow, toCol] = coords[1].split(",").map(Number);
+                moveCheckerOnBoard(fromRow, fromCol, toRow, toCol);
+                isMyTurn = true;
+                document.getElementById('status').innerText = "Ваш ход";
+            }
+        }
+
+        // --- ЛОГИКА ИГРЫ (Упрощенные шашки) ---
+
+        function createBoard() {
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const cell = document.createElement('div');
+                    const isBlack = (row + col) % 2 === 1;
+                    cell.className = cell ${isBlack ? 'black-cell' : 'white-cell'};
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+
+                    if (isBlack && row < 3) {
+                        boardState[row][col] = 'blue';
+                    } else if (isBlack && row > 4) {
+                        boardState[row][col] = 'red';
+                    }
+
+                    cell.addEventListener('click', () => onCellClick(row, col));
+                    boardElement.appendChild(cell);
+                }
+            }
+            updateBoardVisuals();
+        }
+function updateBoardVisuals() {
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                cell.innerHTML = '';
+
+                if (boardState[row][col]) {
+                    const checker = document.createElement('div');
+                    checker.className = checker ${boardState[row][col]};
+                    if (selectedChecker && selectedChecker.row === row && selectedChecker.col === col) {
+                        checker.classList.add('selected');
+                    }
+                    cell.appendChild(checker);
+                }
+            });
+        }
+
+        function onCellClick(row, col) {
+            if (!isMyTurn) {
+                alert("Сейчас ход соперника!");
+                return;
+            }
+
+            if (boardState[row][col] === myColor) {
+                // Выбираем свою шашку
+                selectedChecker = { row, col };
+                updateBoardVisuals();
+            } else if (selectedChecker && (row + col) % 2 === 1) {
+                // Пытаемся походить на пустую черную клетку
+                if (!boardState[row][col]) {
+                    const fromRow = selectedChecker.row;
+                    const fromCol = selectedChecker.col;
+                    
+                    // Самый простой ход на 1 клетку по диагонали вперед
+                    const direction = myColor === 'red' ? -1 : 1;
+                    if (row === fromRow + direction && Math.abs(col - fromCol) === 1) {
+                        moveCheckerOnBoard(fromRow, fromCol, row, col);
+                        sendBluetoothData(MOVE:${fromRow},${fromCol}-${row},${col});
+                        isMyTurn = false;
+                        document.getElementById('status').innerText = "Ход соперника";
+                        selectedChecker = null;
+                    }
+                }
+            }
+        }
+
+        function moveCheckerOnBoard(fromRow, fromCol, toRow, toCol) {
+            boardState[toRow][toCol] = boardState[fromRow][fromCol];
+            boardState[fromRow][fromCol] = null;
+            updateBoardVisuals();
+        }
+    </script>
+</body>
+</html>
