@@ -1,9 +1,15 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.mygame.checkers" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
-    <name>Bluetooth Checkers</name>
-    <description>Локальные шашки по Bluetooth</description>
-    <author email="your@email.com">MyName</author>
-    <content src="www/index.html" />
-    <plugin name="cordova-plugin-bluetooth-serial" />
+<widget id="com.soliev.shashki" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>Shashki</name>
+    <description>Simple Checkers Game</description>
+    <author email="dev@soliev.com" href="http://cordova.io">Soliev Dev</author>
+    
+    <content src="index.html" />
+    
+    <access origin="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    
     <preference name="KeepRunning" value="true" />
+    <preference name="AllowInlineMediaPlayback" value="true" />
 </widget>
